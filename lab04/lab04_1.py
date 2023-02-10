@@ -55,6 +55,7 @@ train_ds = train_ds.map(
     lambda img, label: (data_augmentation(img), label),
     num_parallel_calls=tf.data.AUTOTUNE,
 )
+
 # Prefetching samples in GPU memory helps maximize GPU utilization.
 train_ds = train_ds.prefetch(tf.data.AUTOTUNE)
 
@@ -82,9 +83,6 @@ model_checkpoint_callback = keras.callbacks.ModelCheckpoint(
         save_best_only=True)
 
 epochs=10
-history = model.fit(
-        train_ds,
-        epochs=epochs)
-        #callbacks=[model_checkpoint_callback])
+history = model.fit(train_ds, epochs=epochs, callbacks=[model_checkpoint_callback])
 
 print('#####DONE#####')
