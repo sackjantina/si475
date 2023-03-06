@@ -26,7 +26,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'localizer = localization.localizer:main'
+            'localization = localization.localization:main'
         ],
     },
 )
