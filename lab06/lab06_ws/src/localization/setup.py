@@ -13,6 +13,8 @@ setup(
         ('share/' + package_name, ['package.xml']),
         # launch files
         ('share/' + package_name, glob('launch/*launch.[pxy][yma]*')),
+        ('share' + package_name + '/map', glob('map/*')),
+        ('share' + package_name + '/config', glob('config/*.rviz')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
