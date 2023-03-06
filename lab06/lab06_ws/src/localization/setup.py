@@ -1,3 +1,4 @@
+import os
 from setuptools import setup
 from glob import glob
 
@@ -12,9 +13,9 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         # launch files
-        ('share/' + package_name, glob('launch/*launch.[pxy][yma]*')),
-        ('share' + package_name + '/map', glob('map/*')),
-        ('share' + package_name + '/config', glob('config/*.rviz')),
+        (os.path.join('share', package_name), glob('launch/*launch.[pxy][yma]*')),
+        (os.path.join('share', package_name) + '/map', glob('map/*')),
+        (os.path.join('share', package_name) + '/config', glob('config/*.rviz')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

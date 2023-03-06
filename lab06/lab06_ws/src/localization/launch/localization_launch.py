@@ -46,7 +46,7 @@ def generate_launch_description():
     # this is your code.  
     localization_cmd = Node ( 
             package="localization", 
-            executable="localization", 
+            executable="localizer", 
             name="localization", 
             output="screen"
             )
