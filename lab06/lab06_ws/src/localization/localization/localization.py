@@ -6,10 +6,11 @@ from lifecycle_msgs.srv import ChangeState
 from lifecycle_msgs.msg import Transition
 
 from sensor_msgs.msg import LaserScan
-from nav_msgs.msg import OccupancyGrid 
-from std_msgs.msg import Header 
-from builtin_interfaces.msg import Time 
+from nav_msgs.msg import OccupancyGrid
+from std_msgs.msg import Header
+from builtin_interfaces.msg import Time
 from nav2_msgs.msg import Particle, ParticleCloud
+from geometry_msgs.msg import Pose, Point, Quaternion
 
 
 class Locate(Node):
@@ -63,9 +64,9 @@ class Locate(Node):
         self.map = OccupancyGrid() 
 
         # number of particles.  Probably need to adjust this number 
-        self.num_particles = 10000 
+        self.num_particles = 1000 
 
-        # intiialize the particle cloud 
+        # initialize the particle cloud 
         self.init_particle_cloud() 
     
         # now that we have our particles, we can proceed with the 
@@ -76,16 +77,44 @@ class Locate(Node):
     # about the map such as width, height, resolution, etc.  See the OccupancyGrid message 
     # documentation on-line.  
     def get_map(self, msg): 
-        # TODO 
-        print('getting map...')
+        print("GET MAP")
+        self.map = msg
+        self.width = msg.info.width
+        self.height = msg.info.height
+        self.resolution = msg.info.resolution
+        self.origin = msg.info.origin.position
+        print(self.width, self.height, self.resolution, self.origin)
+
+        self.has_map = True
 
     # initialize the particles with random values.  You will need to determine the appropriate 
     # values for x and y that are consistent with the map.  Using the map resolution, and the map
     # origin will be required.  Also, to create a random Quaternion, you can pass four random 
     # numbers in [0, 1] to the constructor.  For initial weights, set them all to 0.5  
     def init_particle_cloud(self): 
-        # TODO 
-        pass
+        while not self.has_map:
+            pass
+
+        print("Initializing Particle Cloud...")
+        for i in range(self.num_particles):
+            pos = Pose()
+            pos.position = Point()
+            pos.position.x = random.random()*self.width*self.resolution + self.origin.x
+            pos.position.y = random.random()*self.height*self.resolution + self.origin.y
+            pos.position.z = 0.0
+
+            pos.orientation = Quaternion()
+            pos.orientation.x = 0.0
+            pos.orientation.y = 0.0
+            pos.orientation.z = 0.0
+            pos.orientation.w = 0.0
+
+            p = Particle()
+            p.pose = pos
+            p.weight = 0.5
+          
+            self.particle_cloud.particles.append(p)
+        print("Finished Initializing Particle Cloud")
 
 
     # heres where you'll implement the particle filter.  So, your localization algorithm will 
@@ -94,13 +123,14 @@ class Locate(Node):
     # minimum amount prior to running the particle filter.  The /odom topic is helpful here.  
     def locate(self, msg): 
         # implement the complete particle filter here 
-        pass
+        while not self.initialized:
+            pass
 
 
     # Helper function to publish the current set of particles, 
     # so rviz can visualize them 
     def publish_particle_cloud(self):
-        self.particle_cloud.header =  Header(stamp=self.get_clock().now().to_msg(), frame_id='/map') 
+        self.particle_cloud.header = Header(stamp=self.get_clock().now().to_msg(), frame_id='/map') 
         self.cloud_pub.publish(self.particle_cloud)
 
     # Helper function that publishes the current estimate of the 
