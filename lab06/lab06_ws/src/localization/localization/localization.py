@@ -1,6 +1,6 @@
 import rclpy, time, random
 from rclpy.node import Node 
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import qos_profile_sensor_data, QoSDurabilityPolicy, QoSReliabilityPolicy , QoSProfile
 
 from lifecycle_msgs.srv import ChangeState 
 from lifecycle_msgs.msg import Transition
@@ -49,7 +49,12 @@ class Locate(Node):
         rclpy.spin_until_future_complete(self, future) 
 
         # set up some publishers and subscribers 
-        self.laser_sub = self.create_subscription(LaserScan, "/scan", self.locate, qos_profile_sensor_data) 
+        #self.laser_sub = self.create_subscription(LaserScan, "/scan", self.locate, qos_profile_sensor_data) 
+        qos = QoSProfile(depth=5)
+        qos.durability = QoSDurabilityPolicy.VOLATILE
+        qos.reliability = QoSReliabilityPolicy.BEST_EFFORT
+        self.laser_pub = self.create_subscription(LaserScan, '/scan', self.locate, qos)
+        
         self.cloud_pub = self.create_publisher(ParticleCloud, '/particle_cloud', 10) 
 
         # this is the set of particles.  Conviently, nav2_msgs has a Particle and 
@@ -63,7 +68,7 @@ class Locate(Node):
         # the map received from the map server 
         self.map = OccupancyGrid() 
 
-        # number of particles.  Probably need to adjust this number 
+        # number of particles. Probably need to adjust this number 
         self.num_particles = 1000 
 
         # initialize the particle cloud 
@@ -72,12 +77,13 @@ class Locate(Node):
         # now that we have our particles, we can proceed with the 
         # localization algorithm 
         self.initialized = True 
+        self.get_logger().error("INITIALIZED")
 
     # this function should set the self.map variable, and also set other information 
     # about the map such as width, height, resolution, etc.  See the OccupancyGrid message 
     # documentation on-line.  
     def get_map(self, msg): 
-        print("GET MAP")
+        self.get_logger().error("GET MAP")
         self.map = msg
         self.width = msg.info.width
         self.height = msg.info.height
@@ -95,26 +101,30 @@ class Locate(Node):
         while not self.has_map:
             pass
 
-        print("Initializing Particle Cloud...")
+        self.get_logger().error("Initializing Particle Cloud...")
         for i in range(self.num_particles):
             pos = Pose()
             pos.position = Point()
             pos.position.x = random.random()*self.width*self.resolution + self.origin.x
             pos.position.y = random.random()*self.height*self.resolution + self.origin.y
             pos.position.z = 0.0
+            # self.get_logger().error("initialized position")
 
             pos.orientation = Quaternion()
             pos.orientation.x = 0.0
             pos.orientation.y = 0.0
             pos.orientation.z = 0.0
             pos.orientation.w = 0.0
+            # self.get_logger().error("initialized quaternion")
 
             p = Particle()
             p.pose = pos
             p.weight = 0.5
+            # self.get_logger().error("initialized particle " + str(i))
           
             self.particle_cloud.particles.append(p)
-        print("Finished Initializing Particle Cloud")
+
+        self.get_logger().error("Finished Initializing Particle Cloud")
 
 
     # heres where you'll implement the particle filter.  So, your localization algorithm will 
@@ -125,11 +135,25 @@ class Locate(Node):
         # implement the complete particle filter here 
         while not self.initialized:
             pass
+        
+        # print(msg)
+
+        self.M = 50
+        self.Xt = [Point()]*self.M
+
+        for i in range(self.M):
+            # self.Xt[i] = sample_motion_model()
+            pass
+
+        self.get_logger().error("publishing particle cloud")
+        self.publish_particle_cloud()
 
 
     # Helper function to publish the current set of particles, 
     # so rviz can visualize them 
     def publish_particle_cloud(self):
+        self.get_logger().error("Publishing Particle Cloud...")
+
         self.particle_cloud.header = Header(stamp=self.get_clock().now().to_msg(), frame_id='/map') 
         self.cloud_pub.publish(self.particle_cloud)
 
