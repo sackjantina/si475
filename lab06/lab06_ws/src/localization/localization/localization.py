@@ -1,4 +1,5 @@
 import rclpy, time, random
+import numpy as np
 from rclpy.node import Node 
 from rclpy.qos import qos_profile_sensor_data, QoSDurabilityPolicy, QoSReliabilityPolicy , QoSProfile
 
@@ -10,7 +11,10 @@ from nav_msgs.msg import OccupancyGrid
 from std_msgs.msg import Header
 from builtin_interfaces.msg import Time
 from nav2_msgs.msg import Particle, ParticleCloud
-from geometry_msgs.msg import Pose, Point, Quaternion
+from geometry_msgs.msg import Pose, Point, Quaternion, Twist
+
+from tf_transformations import euler_from_quaternion
+from tf_transformations import quaternion_from_euler
 
 
 class Locate(Node):
@@ -57,6 +61,9 @@ class Locate(Node):
         
         self.cloud_pub = self.create_publisher(ParticleCloud, '/particle_cloud', 10) 
 
+        self.command_sub = self.create_subscription(Twist, '/cmd_vel', self.get_command, qos_profile_sensor_data)
+        self.command = Twist()
+
         # this is the set of particles.  Conviently, nav2_msgs has a Particle and 
         # ParticleCloud message already.  
         self.particle_cloud = ParticleCloud()  
@@ -93,6 +100,13 @@ class Locate(Node):
 
         self.has_map = True
 
+    # this function sets the self.command variable from the Twist message published 
+    # on the /cmd_vel topic
+    def get_command(self, msg):
+        self.command.linear = msg.linear
+        self.command.angular = msg.angular
+        self.get_logger().error("Command: Linear = " + self.command.linear + ", Angular = " + self.command.angular)
+
     # initialize the particles with random values.  You will need to determine the appropriate 
     # values for x and y that are consistent with the map.  Using the map resolution, and the map
     # origin will be required.  Also, to create a random Quaternion, you can pass four random 
@@ -103,22 +117,22 @@ class Locate(Node):
 
         self.get_logger().error("Initializing Particle Cloud...")
         for i in range(self.num_particles):
-            pos = Pose()
-            pos.position = Point()
-            pos.position.x = random.random()*self.width*self.resolution + self.origin.x
-            pos.position.y = random.random()*self.height*self.resolution + self.origin.y
-            pos.position.z = 0.0
+            pose = Pose()
+            pose.position = Point()
+            pose.position.x = random.random()*self.width*self.resolution + self.origin.x
+            pose.position.y = random.random()*self.height*self.resolution + self.origin.y
+            pose.position.z = 0.0
             # self.get_logger().error("initialized position")
 
-            pos.orientation = Quaternion()
-            pos.orientation.x = 0.0
-            pos.orientation.y = 0.0
-            pos.orientation.z = 0.0
-            pos.orientation.w = 0.0
+            pose.orientation = Quaternion()
+            pose.orientation.x = 0.0
+            pose.orientation.y = 0.0
+            pose.orientation.z = 0.0
+            pose.orientation.w = 0.0
             # self.get_logger().error("initialized quaternion")
 
             p = Particle()
-            p.pose = pos
+            p.pose = pose
             p.weight = 0.5
             # self.get_logger().error("initialized particle " + str(i))
           
@@ -136,23 +150,75 @@ class Locate(Node):
         while not self.initialized:
             pass
         
-        # print(msg)
+        # if there is no command, don't do anything
+        if self.command.linear == 0 and self.command.angular == 0:
+            self.publish_particle_cloud()
+            return
 
-        self.M = 50
-        self.Xt = [Point()]*self.M
+        for particle in self.particle_cloud.particles:
+            particle.pose = self.sample_motion_model(self.command, particle.pose)
+            particle.weight = self.measurement_model(msg.ranges, particle.pose, self.map)
 
-        for i in range(self.M):
-            # self.Xt[i] = sample_motion_model()
-            pass
+        # select particle based off weights associated with each particle
+        new_pc = ParticleCloud()
+        r = np.random.uniform(self.num_particles)
+        c = self.particle_cloud.particles[0].weight
+        i = 0
+        for m in range(len(self.particle_cloud.particles)):
+            u = r + (m-1)/len(self.particle_cloud.particles)
+            while u > c:
+                i = i+1
+                c = c + self.particle_cloud.particles[i].weight
+            new_pc.particles.append(self.particle_cloud.particles[i])
+
+        self.particle_cloud = new_pc
 
         self.get_logger().error("publishing particle cloud")
         self.publish_particle_cloud()
+        # reset self.command variable
+        self.command.linear.x = 0.0
+        self.command.angular.z = 0.0
 
+    def sample_motion_model(self, command, pose):
+        delta_t = 0.5
+        alpha = 0.01
+        a1 = alpha
+        a2 = alpha
+        a3 = alpha
+        a4 = alpha
+        a5 = alpha
+        a6 = alpha
+
+        v = command.linear.x + sample(a1*abs(command.linear.x) + a2*abs(command.angular.z))
+        w = command.angular.z + sample(a3*command.linear.x + a4*abs(command.angular.z))
+        g = sample(a5*command.linear.x + a6*abs(command.angular.z))
+
+        quaternion_list = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
+        (roll, pitch, yaw) = euler_from_quaternion(quaternion_list)
+        
+        x = pose.position.x - (v/w)*np.sin(yaw) + (v/w)*np.sin(yaw + w*delta_t)
+        y = pose.position.y + (v/w)*np.cos(yaw) - (v/w)*np.cos(yaw + w*delta_t)
+        theta = yaw + w*delta_t + g*delta_t
+
+        new_pose = Pose()
+        new_pose.position.x = x
+        new_pose.position.y = y
+        new_pose.position.z = 0.0
+        q = quaternion_from_euler(0, 0, theta)
+        new_pose.orientation = Quaternion()
+        new_pose.orientation.x = q[0]
+        new_pose.orientation.y = q[1]
+        new_pose.orientation.z = q[2]
+        new_pose.orientation.w = q[3]
+        return new_pose
+
+    def measurement_model(self, zt, pose, map):
+        return 1.0
 
     # Helper function to publish the current set of particles, 
     # so rviz can visualize them 
     def publish_particle_cloud(self):
-        self.get_logger().error("Publishing Particle Cloud...")
+        # self.get_logger().error("Publishing Particle Cloud...")
 
         self.particle_cloud.header = Header(stamp=self.get_clock().now().to_msg(), frame_id='/map') 
         self.cloud_pub.publish(self.particle_cloud)
@@ -165,6 +231,11 @@ class Locate(Node):
         robot_pose_estimate_stamped.header = Header(stamp=self.get_clock().now().to_msg(), frame_id='/map') 
         self.robot_estimate_pub.publish(robot_pose_estimate_stamped)
 
+def norm(v):
+    return np.sqrt(sum(pow(v.x, 2), pow(v.y, 2), pow(v.z, 2)))
+
+def sample(b):
+    return np.sum(np.random.uniform(-b, b, (1, 12)))/2
 
 # the usual boilerplate to get python ROS running 
 def main(args=None):
