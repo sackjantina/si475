@@ -16,6 +16,8 @@ from geometry_msgs.msg import Pose, Point, Quaternion, Twist
 from tf_transformations import euler_from_quaternion
 from tf_transformations import quaternion_from_euler
 
+from .likelihood import LikelihoodField
+
 
 class Locate(Node):
 
@@ -100,12 +102,14 @@ class Locate(Node):
 
         self.has_map = True
 
+        self.likelihood = LikelihoodField(self.map)
+
     # this function sets the self.command variable from the Twist message published 
     # on the /cmd_vel topic
     def get_command(self, msg):
         self.command.linear = msg.linear
         self.command.angular = msg.angular
-        self.get_logger().error("Command: Linear = " + self.command.linear + ", Angular = " + self.command.angular)
+        self.get_logger().error("Command: Linear = " + str(self.command.linear.x) + ", Angular = " + str(self.command.angular.z))
 
     # initialize the particles with random values.  You will need to determine the appropriate 
     # values for x and y that are consistent with the map.  Using the map resolution, and the map
@@ -151,13 +155,13 @@ class Locate(Node):
             pass
         
         # if there is no command, don't do anything
-        if self.command.linear == 0 and self.command.angular == 0:
+        if self.command.linear.x == 0 and self.command.angular.z == 0:
             self.publish_particle_cloud()
             return
 
         for particle in self.particle_cloud.particles:
             particle.pose = self.sample_motion_model(self.command, particle.pose)
-            particle.weight = self.measurement_model(msg.ranges, particle.pose, self.map)
+            particle.weight = self.measurement_model(msg, particle.pose, self.map)
 
         # select particle based off weights associated with each particle
         new_pc = ParticleCloud()
@@ -212,8 +216,22 @@ class Locate(Node):
         new_pose.orientation.w = q[3]
         return new_pose
 
-    def measurement_model(self, zt, pose, map):
-        return 1.0
+    def measurement_model(self, msg, pose, map):
+        _, _, theta_pose = euler_from_quaternion(pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
+
+        lasers = msg.ranges
+        q = 1
+        theta_sense = msg.angle_min
+        for laser in lasers:
+            if laser < msg.range_max:
+                x_beam = pose.position.x + -0.04*np.cos(theta_pose) + laser*np.cos(theta_pose + theta_sense)
+                y_beam = pose.position.y + -0.04*np.sin(theta_pose) + laser*np.sin(theta_pose + theta_sense)
+                
+                # convert x and y from pixel coordinantes to meters
+                
+                dist = self.likelihood.get_closest_obstacle_distance(2,2)
+            
+
 
     # Helper function to publish the current set of particles, 
     # so rviz can visualize them 
@@ -230,9 +248,6 @@ class Locate(Node):
         robot_pose_estimate_stamped.pose = self.robot_estimate
         robot_pose_estimate_stamped.header = Header(stamp=self.get_clock().now().to_msg(), frame_id='/map') 
         self.robot_estimate_pub.publish(robot_pose_estimate_stamped)
-
-def norm(v):
-    return np.sqrt(sum(pow(v.x, 2), pow(v.y, 2), pow(v.z, 2)))
 
 def sample(b):
     return np.sum(np.random.uniform(-b, b, (1, 12)))/2
