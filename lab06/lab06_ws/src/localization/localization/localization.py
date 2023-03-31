@@ -78,7 +78,7 @@ class Locate(Node):
         self.map = OccupancyGrid() 
 
         # number of particles. Probably need to adjust this number 
-        self.num_particles = 1000 
+        self.num_particles = 20 
 
         # initialize the particle cloud 
         self.init_particle_cloud() 
@@ -98,7 +98,6 @@ class Locate(Node):
         self.height = msg.info.height
         self.resolution = msg.info.resolution
         self.origin = msg.info.origin.position
-        print(self.width, self.height, self.resolution, self.origin)
 
         self.has_map = True
 
@@ -142,6 +141,8 @@ class Locate(Node):
           
             self.particle_cloud.particles.append(p)
 
+        self.normalize_weights(self.particle_cloud)
+
         self.get_logger().error("Finished Initializing Particle Cloud")
 
 
@@ -163,16 +164,25 @@ class Locate(Node):
             particle.pose = self.sample_motion_model(self.command, particle.pose)
             particle.weight = self.measurement_model(msg, particle.pose, self.map)
 
+        self.normalize_weights(self.particle_cloud)
+        for p in self.particle_cloud.particles:
+            self.get_logger().error("Weight: " + str(p.weight))
+
         # select particle based off weights associated with each particle
         new_pc = ParticleCloud()
-        r = np.random.uniform(self.num_particles)
+        r = np.random.uniform(0.0, 1.0/self.num_particles)
         c = self.particle_cloud.particles[0].weight
         i = 0
         for m in range(len(self.particle_cloud.particles)):
-            u = r + (m-1)/len(self.particle_cloud.particles)
+            u = r + m/len(self.particle_cloud.particles)
+            self.get_logger().error("U: " + str(u) + ", c: " + str(c))
             while u > c:
                 i = i+1
+                if i >= len(self.particle_cloud.particles):
+                    i = len(self.particle_cloud.particles)-1
+                    break
                 c = c + self.particle_cloud.particles[i].weight
+            self.get_logger().error("adding particle #" + str(i))
             new_pc.particles.append(self.particle_cloud.particles[i])
 
         self.particle_cloud = new_pc
@@ -184,7 +194,7 @@ class Locate(Node):
         self.command.angular.z = 0.0
 
     def sample_motion_model(self, command, pose):
-        delta_t = 0.5
+        delta_t = 0.4
         alpha = 0.01
         a1 = alpha
         a2 = alpha
@@ -197,12 +207,17 @@ class Locate(Node):
         w = command.angular.z + sample(a3*command.linear.x + a4*abs(command.angular.z))
         g = sample(a5*command.linear.x + a6*abs(command.angular.z))
 
-        quaternion_list = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
-        (roll, pitch, yaw) = euler_from_quaternion(quaternion_list)
+        _, _, yaw = euler_from_quaternion([pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
         
+        # convert x and y to meters first
+        # x = pose.position.x * self.resolution
+        # y = pose.position.y * self.resolution
+
         x = pose.position.x - (v/w)*np.sin(yaw) + (v/w)*np.sin(yaw + w*delta_t)
         y = pose.position.y + (v/w)*np.cos(yaw) - (v/w)*np.cos(yaw + w*delta_t)
         theta = yaw + w*delta_t + g*delta_t
+
+        # convert x and y back to pixel values
 
         new_pose = Pose()
         new_pose.position.x = x
@@ -217,10 +232,16 @@ class Locate(Node):
         return new_pose
 
     def measurement_model(self, msg, pose, map):
-        _, _, theta_pose = euler_from_quaternion(pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
+        _, _, theta_pose = euler_from_quaternion([pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w])
+
+        z_hit = 1.0
+        z_rand = 0.1
+        z_max = 0.1
+
+        # self.get_logger().error("angle min: " + str(np.rad2deg(msg.angle_min)) + ", angle max: " + str(np.rad2deg(msg.angle_max)))
 
         lasers = msg.ranges
-        q = 1
+        q = 1.0
         theta_sense = msg.angle_min
         for laser in lasers:
             if laser < msg.range_max:
@@ -228,10 +249,38 @@ class Locate(Node):
                 y_beam = pose.position.y + -0.04*np.sin(theta_pose) + laser*np.sin(theta_pose + theta_sense)
                 
                 # convert x and y from pixel coordinantes to meters
+                # x_beam = x_beam * self.resolution
+                # y_beam = y_beam * self.resolution
                 
-                dist = self.likelihood.get_closest_obstacle_distance(2,2)
-            
+                dist = self.likelihood.get_closest_obstacle_distance(x_beam, y_beam)
+                #self.get_logger().error("dist: " + str(dist))
+                if not np.isnan(dist):
+                    prob = self.prob(dist)
+                    q = q*(z_hit * self.prob(dist)) # + (z_rand/z_max))
+                    self.get_logger().error("q: " + str(q) + "\tdist: " + str(dist) + "\tprob: " + str(prob) + "\tangle: " + str(np.rad2deg(theta_sense)))
+            # self.get_logger().error("theta_sense: " + str(theta_sense))
+            theta_sense = theta_sense + msg.angle_increment
 
+        #self.get_logger().error("q: " + str(q))
+        return q
+    
+    def prob(self, x):
+        sigma_hit = 0.1
+        numer = np.exp(-x*x / (2*sigma_hit))
+        denom = np.sqrt(2*np.pi*sigma_hit)
+        return numer / denom
+            
+    def normalize_weights(self, cloud):
+        s = 0.0
+        for p in cloud.particles:
+            s = s + p.weight
+        for p in cloud.particles:
+            if s > 0.0001:
+                p.weight = p.weight / s
+            else:
+                p.weight = 1.0/self.num_particles 
+
+        return cloud
 
     # Helper function to publish the current set of particles, 
     # so rviz can visualize them 
