@@ -78,7 +78,7 @@ class Locate(Node):
         self.map = OccupancyGrid() 
 
         # number of particles. Probably need to adjust this number 
-        self.num_particles = 20 
+        self.num_particles = 200 
 
         # initialize the particle cloud 
         self.init_particle_cloud() 
@@ -238,7 +238,7 @@ class Locate(Node):
         z_rand = 0.1
         z_max = 0.1
 
-        # self.get_logger().error("angle min: " + str(np.rad2deg(msg.angle_min)) + ", angle max: " + str(np.rad2deg(msg.angle_max)))
+        self.get_logger().error("New Particle")
 
         lasers = msg.ranges
         q = 1.0
@@ -257,7 +257,7 @@ class Locate(Node):
                 if not np.isnan(dist):
                     prob = self.prob(dist)
                     q = q*(z_hit * self.prob(dist)) # + (z_rand/z_max))
-                    self.get_logger().error("q: " + str(q) + "\tdist: " + str(dist) + "\tprob: " + str(prob) + "\tangle: " + str(np.rad2deg(theta_sense)))
+                    # self.get_logger().error("q: " + str(q) + "\tdist: " + str(dist) + "\tprob: " + str(prob) + "\tangle: " + str(np.rad2deg(theta_sense)))
             # self.get_logger().error("theta_sense: " + str(theta_sense))
             theta_sense = theta_sense + msg.angle_increment
 
