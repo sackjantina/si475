@@ -28,7 +28,7 @@ def generate_launch_description():
     map_arg = DeclareLaunchArgument ( 
             'map', 
             default_value = PathJoinSubstitution (
-                [pkg_dir, 'map', 'lab.yaml']), 
+                [pkg_dir, 'map', 'classroom_map_1.yaml']), 
             description="Full path to map YAML file") 
 
     namespace = LaunchConfiguration('namespace') 
