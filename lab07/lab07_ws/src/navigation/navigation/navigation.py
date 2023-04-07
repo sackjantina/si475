@@ -31,18 +31,20 @@ class Navigate(Node):
         goal_pose = PoseStamped()
         goal_pose.header.frame_id = 'map'
         goal_pose.header.stamp = navigator.get_clock().now().to_msg()
-        goal_pose.pose.position = .... 
-        goal_pose.pose.orientation = ..... 
+        #goal_pose.pose.position =  
+        #goal_pose.pose.orientation =  
 
         # To create a path, you need a sequence of poses to follow. Create the object you'll pass to
         # self.navigator as follows: 
-        #     poses = [ 
-        #        [1.2, 3.0], 
-        #        [3.4, 1.34], 
-        #          ... 
-        #      ] 
+        poses = [ 
+            [1.2, 3.0], 
+            [3.4, 1.34]
+         ] 
         # where each point is the X and Y position.  Note that all the values must be floating point.  The 
         # Python function reverse will come in handy for repeating your path.  
+
+        for pose in poses:
+            goal_pose.append(navigator.getPoseStamped(pose, TurtleBot4Directions.North))
 
     
 def main(args=None):

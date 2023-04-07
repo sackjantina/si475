@@ -16,7 +16,7 @@ ARGUMENTS = [
 
 def generate_launch_description(): 
     pkg_nav2_bringup = get_package_share_directory('nav2_bringup') 
-    pkg_dir = get_package_share_directory('navigation_lab') 
+    pkg_dir = get_package_share_directory('navigation') 
     turtlebot4_viz = get_package_share_directory('turtlebot4_viz') 
 
     localization_params_arg = DeclareLaunchArgument(
@@ -53,7 +53,7 @@ def generate_launch_description():
                           'use_namespace': 'False'}.items())
 
     navigation_cmd = Node ( 
-            package='navigation_lab', 
+            package='navigation', 
             executable='navigation', 
             name='navigation_lab', 
             output='screen'
