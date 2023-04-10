@@ -26,13 +26,18 @@ class Navigate(Node):
 
     # here's where all the magic happens.  
     def navigate(self, msg): 
+        # This function will start once anything is published to /start_navigation topic
+        self.get_logger().error("-------------- Starting Navigation --------------")
+
+        # Set initial pose in RViz before starting navigation
+
         # All poses we want to navigate to must be stamped with the correct header information.  Follow this 
         # example: 
         goal_pose = PoseStamped()
         goal_pose.header.frame_id = 'map'
-        goal_pose.header.stamp = navigator.get_clock().now().to_msg()
-        #goal_pose.pose.position =  
-        #goal_pose.pose.orientation =  
+        goal_pose.header.stamp = self.navigator.get_clock().now().to_msg()
+        goal_pose.pose.position =  ....
+        goal_pose.pose.orientation =  ....
 
         # To create a path, you need a sequence of poses to follow. Create the object you'll pass to
         # self.navigator as follows: 
@@ -43,8 +48,11 @@ class Navigate(Node):
         # where each point is the X and Y position.  Note that all the values must be floating point.  The 
         # Python function reverse will come in handy for repeating your path.  
 
-        for pose in poses:
-            goal_pose.append(navigator.getPoseStamped(pose, TurtleBot4Directions.North))
+        # for pose in poses:
+        #     goal_pose.append(self.navigator.getPoseStamped(pose, TurtleBot4Directions.North))
+
+        # Start navigation
+        self.navigator.startThroughPoses(goal_pose)
 
     
 def main(args=None):
