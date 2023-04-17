@@ -40,10 +40,10 @@ class Navigate(Node):
         # To create a path, you need a sequence of poses to follow. Create the object you'll pass to
         # self.navigator as follows: 
         poses = [ 
-            [3.6, -1.4, 0.0],
-            [1.0, -1.4, 1.57],
-            [1.0, -2.4, -2.8],
-            [0.0, -2.6, -2.86]
+            [0.25, -3.54, 0.23],
+            [3.46, -2.85, 1.75],
+            [3.07, -0.57, -2.87],
+            [-0.295, -1.03, -1.34]
          ] 
         # where each point is the X and Y position.  Note that all the values must be floating point.  The 
         # Python function reverse will come in handy for repeating your path.  
