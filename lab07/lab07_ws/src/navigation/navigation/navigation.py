@@ -9,12 +9,14 @@ from rclpy.action import ActionClient
 from rclpy.duration import Duration 
 from rclpy.qos import qos_profile_system_default
 
+from tf_transformations import quaternion_from_euler
+
 class Navigate(Node): 
     def __init__(self): 
         super().__init__("Navigate") 
 
         # Since we need to set the initial pose with Rviz, we will use a topic to start the navigation process.  
-        # After setting the initial pose, from the command line run: ros2 topic pub -1 std_msgs/String  
+        # After setting the initial pose, from the command line run: ros2 topic pub -1 /start_navigation std_msgs/String
         # We don't care about the content of the message, only that a message was received.  
         self.create_subscription(String, '/start_navigation', self.navigate, qos_profile_system_default) 
 
@@ -26,33 +28,46 @@ class Navigate(Node):
 
     # here's where all the magic happens.  
     def navigate(self, msg): 
+        # Set initial pose in RViz before starting 
+        
         # This function will start once anything is published to /start_navigation topic
         self.get_logger().error("-------------- Starting Navigation --------------")
 
-        # Set initial pose in RViz before starting navigation
-
         # All poses we want to navigate to must be stamped with the correct header information.  Follow this 
         # example: 
-        goal_pose = PoseStamped()
-        goal_pose.header.frame_id = 'map'
-        goal_pose.header.stamp = self.navigator.get_clock().now().to_msg()
-        goal_pose.pose.position =  ....
-        goal_pose.pose.orientation =  ....
+        goal_pose = []
 
         # To create a path, you need a sequence of poses to follow. Create the object you'll pass to
         # self.navigator as follows: 
         poses = [ 
-            [1.2, 3.0], 
-            [3.4, 1.34]
+            [3.6, -1.4, 0.0],
+            [1.0, -1.4, 1.57],
+            [1.0, -2.4, -2.8],
+            [0.0, -2.6, -2.86]
          ] 
         # where each point is the X and Y position.  Note that all the values must be floating point.  The 
         # Python function reverse will come in handy for repeating your path.  
 
-        # for pose in poses:
-        #     goal_pose.append(self.navigator.getPoseStamped(pose, TurtleBot4Directions.North))
+        for pose in poses:
+            p = self.get_PoseStamped(pose[0], pose[1], pose[2])
+            goal_pose.append(p)
 
         # Start navigation
-        self.navigator.startThroughPoses(goal_pose)
+        self.navigator.goThroughPoses(goal_pose)
+
+    def get_PoseStamped(self, x, y, angle):
+        pose = PoseStamped()
+        pose.header.frame_id = 'map'
+        pose.header.stamp = self.navigator.get_clock().now().to_msg()
+        pose.pose.position.x = x
+        pose.pose.position.y = y
+        x_q, y_q, z_q, w_q = quaternion_from_euler(0, 0, angle)
+        pose.pose.orientation.x = x_q
+        pose.pose.orientation.y = y_q
+        pose.pose.orientation.z = z_q
+        pose.pose.orientation.w = w_q
+        return pose
+
 
     
 def main(args=None):
