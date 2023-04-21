@@ -18,24 +18,24 @@ class Competition(Node):
         params = cv2.SimpleBlobDetector_Params()
 
         # Change thresholds
-        params.minThreshold = 10;
-        params.maxThreshold = 240;
+        params.minThreshold = 0
+        params.maxThreshold = 255
         
         # Filter by Area.
         params.filterByArea = True
-        params.minArea = 200
+        params.minArea = 400
         
         # Filter by Circularity
         params.filterByCircularity = True
-        params.minCircularity = 0.8
+        params.minCircularity = 0.1
         
         # Filter by Convexity
         params.filterByConvexity = True
-        params.minConvexity = 0.1
+        params.minConvexity = 0.01
         
         # Filter by Inertia
         params.filterByInertia = True
-        params.minInertiaRatio = 0.008
+        params.minInertiaRatio = 0.01
 
         self.detector = cv2.SimpleBlobDetector_create(params)
 
@@ -43,17 +43,24 @@ class Competition(Node):
         # self.get_logger().error("Processing Image")
 
         img = self.bridge.imgmsg_to_cv2(msg)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        # thresh_val = np.average(img)
-        # ret, thresh = cv2.threshold(img, thresh_val, 255, cv2.THRESH_BINARY)
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        hue, saturation, value = cv2.split(hsv[:,:])
+        ret, thresh = cv2.threshold(saturation, np.average(saturation)+ 3*np.std(saturation), 255, cv2.THRESH_BINARY)
 
-        keypoints = self.detector.detect(img)
-        blob_img = cv2.drawKeypoints(img, keypoints, np.array([]), (0, 0, 255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        mask = cv2.erode(thresh, None, iterations=4)
+        mask = cv2.dilate(mask, None, iterations=4)
+        mask = 255-mask
 
-        cv2.imshow('img', img)
-        cv2.imshow('hue', img[:,:,0])
-        cv2.imshow('saturation', img[:,:,1])
-        cv2.imshow('value', img[:,:,2])
+        keypoints = self.detector.detect(mask)
+        blob_img = cv2.drawKeypoints(mask, keypoints, np.array([]), (0, 0, 255), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        
+        if len(keypoints) > 0:
+            for k in keypoints:
+                print(f"({k.pt}): {k.size}")
+
+
+        cv2.imshow('original', img)
+        # cv2.imshow('mask', mask)
         # cv2.imshow('thresholded image', thresh)
         cv2.imshow('blobbed image', blob_img)
         cv2.waitKey(100) 
