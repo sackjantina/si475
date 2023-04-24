@@ -1,12 +1,16 @@
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, BatteryState
 from cv_bridge import CvBridge
 from rclpy.qos import qos_profile_system_default
 from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import Twist
-from irobot_create_msgs.msg import WheelTicks
-from std_msgs.msg import Float32
+from nav2_simple_commander.robot_navigator import BasicNavigator
+from geometry_msgs.msg import PoseStamped
+from tf_transformations import quaternion_from_euler
+from std_msgs.msg import String 
+
+
 import cv2
 import numpy as np
 
@@ -15,15 +19,24 @@ class Competition(Node):
     def __init__(self):
         super().__init__("Competition")
         
-        # connect to topic that controls the wheels 
-        self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
         # subscriber to read the wheel ticks 
-        self.subscriber = self.create_subscription(WheelTicks, '/wheel_ticks', self.tick_callback, qos_profile_sensor_data)
+        # self.subscriber = self.create_subscription(WheelTicks, '/wheel_ticks', self.tick_callback, qos_profile_sensor_data)
 
         # ros2 topic pub --once /angle std_msgs/Float32 "data: 0.785"
-        self.turn_sub = self.create_subscription(Float32, '/angle', self.turn, qos_profile_sensor_data)
+        # self.turn_sub = self.create_subscription(Float32, '/angle', self.turn, qos_profile_sensor_data)
         
         self.create_subscription(Image, '/kinect_image', self.process_image, qos_profile_system_default)
+
+        # Create subscription to get battery percentage
+        self.create_subscription(BatteryState, '/battery_state', self.get_battery, qos_profile_sensor_data)
+        self.battery_percent = 0.0
+
+        self.time_interval = 0.5
+        self.create_timer(self.time_interval, self.state_machine)
+
+        # State Functions
+        self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
+
 
         self.bridge = CvBridge() # create a CvBridge object for later use
 
@@ -51,6 +64,35 @@ class Competition(Node):
 
         self.detector = cv2.SimpleBlobDetector_create(params)
 
+        self.blobs = []
+
+        self.state = "Searching"
+
+        self.return_home = False
+        self.home = self.get_PoseStamped(0.0, 0.0, 0.0)
+
+        self.navigator = BasicNavigator() 
+        self.navigator.waitUntilNav2Active()
+
+        self.create_subscription(String, '/start_navigation', self.navigate, qos_profile_system_default) 
+
+
+    def navigate(self, msg):
+        self.return_home = True
+
+    def get_PoseStamped(self, x, y, angle):
+        pose = PoseStamped()
+        pose.header.frame_id = 'map'
+        pose.header.stamp = self.navigator.get_clock().now().to_msg()
+        pose.pose.position.x = x
+        pose.pose.position.y = y
+        x_q, y_q, z_q, w_q = quaternion_from_euler(0, 0, angle)
+        pose.pose.orientation.x = x_q
+        pose.pose.orientation.y = y_q
+        pose.pose.orientation.z = z_q
+        pose.pose.orientation.w = w_q
+        return pose
+
     def process_image(self, msg):
         # self.get_logger().error("Processing Image")
 
@@ -71,7 +113,7 @@ class Competition(Node):
 
         if len(keypoints) > 0:
             for k in keypoints:
-                print(f"({k.pt}): {k.size}")
+                print(f"{k.pt}: {k.size}")
                 cmd = Twist()
                 #if k.pt < middle: #left side of middle
                 #   cmd.angular.z = 
@@ -84,7 +126,34 @@ class Competition(Node):
         # cv2.imshow('mask', mask)
         # cv2.imshow('thresholded image', thresh)
         cv2.imshow('blobbed image', blob_img)
-        cv2.waitKey(100) 
+        cv2.waitKey(100)
+
+        self.blobs = keypoints
+
+    def get_battery(self, msg):
+        self.battery_percent = msg.percentage
+
+    def state_machine(self):
+        self.get_logger().error("running state machine")
+
+        # check battery level
+        if self.battery_percent < 0.2 or self.return_home:
+            self.state = "Return"
+            self.get_logger().error(self.state)
+            self.navigator.goToPose(self.home)
+            return
+
+        # check if heighest weighted particle is near boundary
+
+        # check if any balloons are in view
+        if len(self.blobs) > 0:
+            self.state = "Hunting"
+            self.get_logger().error(self.state)
+        else:
+            self.state = "Searching"
+            self.get_logger().error(self.state)
+        
+
 
 def main(args=None):
     rclpy.init(args=args)
